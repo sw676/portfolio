@@ -2,150 +2,201 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>3D Portfolio Drive</title>
+  <title>Cinematic Portfolio</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Helvetica, Arial, sans-serif;
+    }
+
     canvas { display: block; }
-    #ui {
+
+    /* Minimal HUD */
+    #hud {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      font-family: sans-serif;
+      top: 20px;
+      left: 20px;
+      color: rgba(255,255,255,0.75);
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
       z-index: 10;
+      mix-blend-mode: difference;
+    }
+
+    #title {
+      position: absolute;
+      bottom: 40px;
+      left: 20px;
+      color: white;
+      font-size: 18px;
+      letter-spacing: 4px;
+      font-weight: 300;
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-<div id="ui">WASD to drive</div>
+
+<div id="hud">WASD • Explore</div>
+<div id="title">YOUR NAME — PORTFOLIO</div>
 
 <script type="module">
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-// ---------- Scene ----------
+// 🌌 Scene (cinematic fog)
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xa0a0a0, 10, 100);
+scene.background = new THREE.Color(0x050608);
+scene.fog = new THREE.FogExp2(0x050608, 0.03);
 
+// 🎥 Camera
 const camera = new THREE.PerspectiveCamera(
-  75,
+  70,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  200
 );
 
+// 🖥 Renderer (film-like tone mapping)
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
 
-// ---------- Light ----------
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 5);
-scene.add(light);
+// 💡 Lights (Weta-style dramatic lighting)
+const ambient = new THREE.AmbientLight(0x1a1a1a, 1);
+scene.add(ambient);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+const keyLight = new THREE.DirectionalLight(0x88ccff, 2);
+keyLight.position.set(5, 10, 5);
+scene.add(keyLight);
 
-// ---------- Ground ----------
-const groundGeo = new THREE.PlaneGeometry(200, 200);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f });
-const ground = new THREE.Mesh(groundGeo, groundMat);
+const rimLight = new THREE.PointLight(0xff3355, 5, 50);
+rimLight.position.set(-5, 2, -5);
+scene.add(rimLight);
+
+// 🌑 Ground (dark reflective plane)
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({
+    color: 0x0a0a0a,
+    metalness: 0.6,
+    roughness: 0.9
+  })
+);
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
-// ---------- Car ----------
-const car = new THREE.Mesh(
-  new THREE.BoxGeometry(1, 0.5, 2),
-  new THREE.MeshStandardMaterial({ color: 0xff0000 })
-);
-car.position.y = 0.5;
-scene.add(car);
+// 🏗 Minimal “monolith” structures (Weta vibe)
+const blocks = [];
 
-// ---------- Simple buildings ----------
-for (let i = 0; i < 30; i++) {
-  const b = new THREE.Mesh(
+for (let i = 0; i < 25; i++) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x111111,
+    metalness: 0.8,
+    roughness: 0.4,
+    emissive: new THREE.Color(0x0a0a0a)
+  });
+
+  const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(
-      1 + Math.random() * 3,
-      1 + Math.random() * 10,
-      1 + Math.random() * 3
+      1 + Math.random() * 2,
+      2 + Math.random() * 8,
+      1 + Math.random() * 2
     ),
-    new THREE.MeshStandardMaterial({ color: 0x888888 })
+    mat
   );
-  b.position.set(
+
+  mesh.position.set(
     (Math.random() - 0.5) * 80,
-    0.5,
+    mesh.geometry.parameters.height / 2,
     (Math.random() - 0.5) * 80
   );
-  scene.add(b);
+
+  scene.add(mesh);
+  blocks.push(mesh);
 }
 
-// ---------- Controls ----------
+// 🚗 Player “drone” instead of car (more cinematic)
+const player = new THREE.Mesh(
+  new THREE.SphereGeometry(0.3, 16, 16),
+  new THREE.MeshStandardMaterial({
+    color: 0x88ccff,
+    emissive: 0x224466,
+    metalness: 1
+  })
+);
+player.position.y = 1;
+scene.add(player);
+
+// 🎮 Controls
 const keys = {};
-window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// ---------- Movement ----------
-let speed = 0;
-let rotation = 0;
+// Movement (floaty cinematic feel)
+let velocity = new THREE.Vector3();
 
-function updateCar() {
-  const accel = 0.002;
-  const maxSpeed = 0.2;
-  const friction = 0.98;
+function updatePlayer() {
+  const speed = 0.05;
 
-  // forward/backward
-  if (keys["w"]) speed += accel;
-  if (keys["s"]) speed -= accel;
+  if (keys["w"]) velocity.z -= speed;
+  if (keys["s"]) velocity.z += speed;
+  if (keys["a"]) velocity.x -= speed;
+  if (keys["d"]) velocity.x += speed;
 
-  speed *= friction;
-  speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
+  velocity.multiplyScalar(0.92);
 
-  // steering
-  if (keys["a"]) rotation += 0.03;
-  if (keys["d"]) rotation -= 0.03;
-
-  car.rotation.y = rotation;
-
-  car.position.x += Math.sin(rotation) * speed * 10;
-  car.position.z += Math.cos(rotation) * speed * 10;
+  player.position.add(velocity);
 }
 
-// ---------- Camera follow ----------
+// 🎥 Smooth cinematic camera follow
 function updateCamera() {
-  const offset = new THREE.Vector3(
-    Math.sin(rotation) * -5,
-    3,
-    Math.cos(rotation) * -5
-  );
+  const target = player.position.clone();
 
   camera.position.lerp(
     new THREE.Vector3(
-      car.position.x + offset.x,
-      car.position.y + offset.y,
-      car.position.z + offset.z
+      target.x + 2,
+      target.y + 2,
+      target.z + 6
     ),
-    0.1
+    0.05
   );
 
-  camera.lookAt(car.position);
+  camera.lookAt(target);
 }
 
-// ---------- Loop ----------
+// 🌫 Subtle animation for atmosphere
+function animateBlocks() {
+  blocks.forEach((b, i) => {
+    b.position.y += Math.sin(Date.now() * 0.001 + i) * 0.002;
+  });
+}
+
+// 🔁 Loop
 function animate() {
   requestAnimationFrame(animate);
 
-  updateCar();
+  updatePlayer();
   updateCamera();
+  animateBlocks();
 
   renderer.render(scene, camera);
 }
 
 animate();
 
-// ---------- Resize ----------
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+// 📐 Resize
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 </script>
+
 </body>
 </html>
